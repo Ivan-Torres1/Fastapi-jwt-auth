@@ -149,6 +149,13 @@ async def users():
     users = cursor.fetchall()
     return users
 
+
+@app.get("/")
+async def saludo():
+    return {"Hola":"Mundo"}
+
+
+
 # Register administradores
 
 
