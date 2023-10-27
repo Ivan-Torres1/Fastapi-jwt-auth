@@ -85,6 +85,18 @@ class User(BaseModel):
 
 #                           ////////////////
 
+@app.get("/users")
+async def users():
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+    return users
+
+
+@app.get("/")
+async def saludo():
+    return {"Hola":"Mundo"}
+
+
 @app.post("/register")
 async def registro(user: User ):
     VerifyUser(user.email,user.name)
@@ -143,16 +155,7 @@ async def comprobarToken(token: str = Depends(oauth2)):
 async def me(user: User = Depends(comprobarToken)):
     return user
 
-@app.get("/users")
-async def users():
-    cursor.execute("SELECT * FROM users")
-    users = cursor.fetchall()
-    return users
 
-
-@app.get("/")
-async def saludo():
-    return {"Hola":"Mundo"}
 
 
 
