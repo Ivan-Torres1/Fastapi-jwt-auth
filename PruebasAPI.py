@@ -1,26 +1,20 @@
 import requests
 import os
-
-
-if os.name == 'posix':  
-        os.system('clear')
-else: 
-    os.system('cls')
+from tabulate import tabulate
 
 
 
-# rta = requests.get(url)
+# LIMPIAR LA CONSOLA
+# if os.name == 'posix':  
+#         os.system('clear')
+# else: 
+#     os.system('cls')
 
-# if rta.status_code == 200:
-#     data = rta.json()
-#     print(f'Nombre: {data[0][1]}')
-#     print(f'Apellido: {data[0][2]}')
-# else:
-#     print("Ocurrio un error", rta.status_code)
 
 
 opcion = True
 
+# OPCIONES
 print("Bienvenido a tu web")
 print("Elija una opcion")
 while opcion:
@@ -39,7 +33,7 @@ while opcion:
     else:
           print("Esa opcion no existe. Vuelve a intentarlo")
 
-
+#           REGISTRAR UN USUARIO
 if pregunta == "1":
     print("Nombre")
     nombre = input('>> ')
@@ -60,10 +54,11 @@ if pregunta == "1":
     response = requests.post(url,json=sendDate)
     if response.status_code == 200:
          data = response.json()
-         print(data)
+         print("Se registro correctamente")
     else:
          print("Ocurrio un error")
 
+#  INICIO DE SESION DE UN USUARIO YA CREADO EN LA BASE DE DATOS
 if pregunta == "2":
     print("Email")
     email = input(">> ")
@@ -79,28 +74,49 @@ if pregunta == "2":
         data = response.json()
         print("Inicio sesión correctamente")
         print("Elija una opcion")
-        opcion = True
-        print("Elija una opcion")
-        print(""" 
-        1 => Ver mi perfil
-        """)
-        pregunta = input('>> ')
-        # if pregunta == "1" or pregunta == "2" or pregunta == "3":
-        #     opcion = False
-        if pregunta == "1":
+        miopcion = True
+        while miopcion: 
+            print("1 => Ver mi perfil")
+
+            pregunta = input('>> ')
+    
+            if pregunta == "1":
+                miopcion = False
+        if miopcion == False:
             date = data["access_token"]
             url = "http://127.0.0.1:8000/users/me"
-            response = requests.get(url,data=date)
+            headers = {"Authorization": f"Bearer {date}"}
+
+            response = requests.get(url,headers=headers)
             if response.status_code == 200:
                 data = response.json()
-                print(data)
+                dataLista = [data]
+                head = ["NOMBRE","APELLIDO","EMAIL"]
+                tablePerfil = tabulate(dataLista,headers=head,tablefmt="simple")
+                print(tablePerfil)
+                print()
+
             else:
                 print("Ocurrio un eror con su estado", response.status_code)
-            
-
     else:
-         print("Ocurrio un breve error")
-         print(response.status_code)        
+        print(f"Ocurrio un error {response.status_code} {response.text}")
+
+        
+if pregunta == "3":
+    url = "http://127.0.0.1:8000/users"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        headers = ["ID","NOMBRE","APELLIDO","CONTRASEÑA","EMAIL"]
+        table = tabulate(data,headers=headers,tablefmt="orgtbl",stralign="center",rowsep=2)
+        print(table)
+        print()
+
+
+
+
+             
+      
 
 
 
