@@ -5,10 +5,10 @@ from tabulate import tabulate
 
 
 # LIMPIAR LA CONSOLA
-# if os.name == 'posix':  
-#         os.system('clear')
-# else: 
-#     os.system('cls')
+if os.name == 'posix':  
+        os.system('clear')
+else: 
+    os.system('cls')
 
 
 
@@ -55,8 +55,16 @@ if pregunta == "1":
     if response.status_code == 200:
          data = response.json()
          print("Se registro correctamente")
+    elif "name" in response.text or "lastname" in response.text:
+         print("Ocurrio un error de validacion, solo se permiten letras en el nombre y apellido. Vuelva a intentarlo. ")
+    elif "password" in response.text:
+        print("Error de validacion, la contraseña debe tener como minimo")
+        print("UNA LETRA MAYUSCULA Y UN NUMERO")
+    elif "email" in response.text:
+        print("El email debe tener el formato basico")
+        print("name@host.com")
     else:
-         print("Ocurrio un error")
+        print("OCURRIO UN ERROR")
 
 #  INICIO DE SESION DE UN USUARIO YA CREADO EN LA BASE DE DATOS
 if pregunta == "2":
@@ -72,12 +80,14 @@ if pregunta == "2":
     response = requests.post(url,data=sendDate)
     if response.status_code == 200:
         data = response.json()
+        print()
         print("Inicio sesión correctamente")
         print("Elija una opcion")
         miopcion = True
         while miopcion: 
+            print()
             print("1 => Ver mi perfil")
-
+            print()
             pregunta = input('>> ')
     
             if pregunta == "1":
@@ -91,6 +101,7 @@ if pregunta == "2":
             if response.status_code == 200:
                 data = response.json()
                 dataLista = [data]
+                print()
                 head = ["NOMBRE","APELLIDO","EMAIL"]
                 tablePerfil = tabulate(dataLista,headers=head,tablefmt="simple")
                 print(tablePerfil)
@@ -98,8 +109,15 @@ if pregunta == "2":
 
             else:
                 print("Ocurrio un eror con su estado", response.status_code)
+
+    elif response.status_code == 404:
+            print("Usuario no encontrado, verifique que escribio el usuario correctamente.")
+
+    elif response.status_code == 400:
+        print("La contraseña es incorrecta, Vuelva a intentarlo.")
+
     else:
-        print(f"Ocurrio un error {response.status_code} {response.text}")
+        print(f"OCURRIO UN ERROR")
 
         
 if pregunta == "3":
@@ -108,7 +126,7 @@ if pregunta == "3":
     if response.status_code == 200:
         data = response.json()
         headers = ["ID","NOMBRE","APELLIDO","CONTRASEÑA","EMAIL"]
-        table = tabulate(data,headers=headers,tablefmt="orgtbl",stralign="center",rowsep=2)
+        table = tabulate(data,headers=headers,tablefmt="grid",stralign="center")
         print(table)
         print()
 

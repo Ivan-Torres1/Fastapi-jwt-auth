@@ -9,12 +9,16 @@ import pymysql
 
 
 
+
+
 """
 
-{"name":"Eros",
-"lastname":"Zalazar",
-"password":"Gaby555",
-"email":"eroszalazar@gmail.com"}
+{"name":"Marta",
+"lastname":"Flores",
+"password":"Familia123",
+"email":"lamartamanda@gmail.com"}
+
+# PatriManda123
 
 
 """
@@ -55,18 +59,17 @@ def VerifyUser(email,name):
     pass
 
 
+def Haspassword(password):
+    hasheo = crypt.hash(password)
+    return hasheo
 
-def tupleToDic(username):
-    cursor.execute("SELECT * FROM users WHERE email=%s",[username])
-    user_tuple = cursor.fetchone()
-    column = [columna[0] for columna in cursor.description]
-    user_dict = dict(zip(column,username))
-    userBM = User(**user_dict)
-    return userBM
+
+
 
 
 
 #                           basemodel
+
 class User(BaseModel):
     name: constr(
         min_length=2,
@@ -81,10 +84,28 @@ class User(BaseModel):
         min_length=7,
         regex="^(?=.*[A-Z])(?=.*[0-9]).*$" )
     email: EmailStr
+
+
+
+class UserValidationEdit(BaseModel):
+    name: Optional[constr(
+        min_length=2,
+        max_length=40,
+        regex="^[A-Za-z]+$")]
     
+    lastname: Optional[constr(min_length=2,
+        max_length=40,
+        regex="^[A-Za-z]+$")]
+
+    password: Optional[constr( 
+        min_length=7,
+        regex="^(?=.*[A-Z])(?=.*[0-9]).*$" )]
+    email: Optional[EmailStr]
+
+
 
 #                           ////////////////
-
+#           VER TODOS LOS USUARIOS DE LA BASE DE DATOS
 @app.get("/users")
 async def users():
     cursor.execute("SELECT * FROM users")
@@ -97,31 +118,30 @@ async def saludo():
     return {"Hola":"Mundo"}
 
 
+
+#           REGISTER
 @app.post("/register")
 async def registro(user: User ):
     VerifyUser(user.email,user.name)
-    hashPasword = crypt.hash(user.password)
+    contraseña = Haspassword(user.password)
     
-
     cursor.execute(
         "INSERT INTO users (name, lastname, email, password) VALUES (%s, %s, %s, %s)",
-        (user.name, user.lastname, user.email, hashPasword)
-    )
+        (user.name, user.lastname, user.email, contraseña))
     conn.commit()
     
     return {"message": "Se registro correctamente"}
 
-
+#           LOGIN
 @app.post("/login")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
     
     cursor.execute("SELECT email,password FROM users WHERE email=%s",[form.username])
     user = cursor.fetchone()
-    
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     
-    if not crypt.verify(form.password,user[1]):
+    if not crypt.verify(form.password,user[1]): 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
                             detail="The password is incorrect")
     
@@ -132,7 +152,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 
 
 
-
+# COMPRUEBA SI LA PERSONA SE LOGEO CORRECTAMENTE
 async def comprobarToken(token: str = Depends(oauth2)):
     error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales de autenticación inválidas",
@@ -145,67 +165,44 @@ async def comprobarToken(token: str = Depends(oauth2)):
     except JWTError:
         raise error
     
-    cursor.execute("SELECT name,lastname,email FROM users WHERE email=%s",[username])
+    cursor.execute("SELECT name,lastname,email,id FROM users WHERE email=%s",[username])
     usernamee = cursor.fetchone()
     
     return usernamee
 
-
+#  RETORNA INFORMACION DE USUARIO LOGEADO
 @app.get("/users/me")
 async def me(user: User = Depends(comprobarToken)):
     return user
 
 
 
+# EDITA LA INFORMACION DE UN USUARIO
+# EJEMPLO 
+# http://127.0.0.1:8000/users/editUser/name?newdate=Aylen
+@app.put("/users/editUser/{columnaName}")
+async def editUsers(columnaName: str, newdate: str, user: User = Depends(comprobarToken)):
+    diccio = {columnaName: newdate}
+    validation = UserValidationEdit(columnaName=newdate)
+    try:
+        validation.validate(value=diccio)
+    except ValueError as error:
+        return {"ERROR": f"OCURRIO UN ERROR \n {error}"}
+    if columnaName == "password":
+        newdate = Haspassword(newdate)
+        print(newdate)
+ 
+    try:
+        cursor.execute(f"UPDATE users SET {columnaName} = %s WHERE id = %s", [newdate, user[3]])
+        conn.commit()
+    except Exception as e:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTELO MAS TARDE"}
+    
+    return {"Put": "Se actualizo correctamente el usuario"}
+    
+    
 
 
 # Register administradores
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
