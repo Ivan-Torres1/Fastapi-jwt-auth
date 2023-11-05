@@ -48,10 +48,12 @@ SECRET = "b8180510ef47b510a20a0410eca9cead13c81cf313f3a196453a78c0af02a429"
 ALGORITHM = "HS256"
 crypt = CryptContext(schemes=["bcrypt"])
 
+
+
 #                                       Funciones 
 def VerifyUser(email,name):
     cursor.execute("SELECT id FROM users WHERE email=%s or name=%s",[email,name])
-    date = cursor.fetchall()
+    date = cursor.fetchone()
     if date:
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,
                             detail="Su gmail o nombre de usuario ya se ha usado para crear una cuenta",
@@ -65,8 +67,26 @@ def Haspassword(password):
 
 
 
-
-
+#                           COMPRUEBA SI LA PERSONA SE LOGEO CORRECTAMENTE / COMPRUEBA EL TOKEN
+async def comprobarToken(token: str = Depends(oauth2)):
+    error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciales de autenticación inválidas",
+        headers={"WWW-Authenticate": "Bearer"})
+    
+    try:
+        username = jwt.decode(token,SECRET,algorithms=[ALGORITHM]).get("sub")
+        if username is None:
+            raise error
+    except JWTError:
+        raise error
+    
+    try:
+        cursor.execute("SELECT name,lastname,email,id FROM users WHERE id=%s",[username])
+        usernamee = cursor.fetchone()
+    except Exception:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE"}
+    return usernamee
+# ------------------------------------------------------------------------------------------------------
 
 #                           basemodel
 
@@ -104,13 +124,11 @@ class UserValidationEdit(BaseModel):
 
 
 
-#                           ////////////////
-#           VER TODOS LOS USUARIOS DE LA BASE DE DATOS
-@app.get("/users")
-async def users():
-    cursor.execute("SELECT * FROM users")
-    users = cursor.fetchall()
-    return users
+
+
+
+
+# /////////////////////////////////////////////////////
 
 
 @app.get("/")
@@ -118,66 +136,63 @@ async def saludo():
     return {"Hola":"Mundo"}
 
 
+#                                VER TODOS LOS USUARIOS DE LA BASE DE DATOS
+@app.get("/users")
+async def users():
+    try:
+        cursor.execute("SELECT * FROM users")
+        users = cursor.fetchall()
+    except Exception:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE"}
+    return users                                
 
-#           REGISTER
-@app.post("/register")
+
+
+
+#                            RETORNA INFORMACION DE USUARIO LOGEADO
+@app.get("/users/me")
+async def me(user: User = Depends(comprobarToken)):
+    return user
+
+
+#                                     REGISTER
+@app.post("/users/register")
 async def registro(user: User ):
     VerifyUser(user.email,user.name)
     contraseña = Haspassword(user.password)
-    
-    cursor.execute(
-        "INSERT INTO users (name, lastname, email, password) VALUES (%s, %s, %s, %s)",
-        (user.name, user.lastname, user.email, contraseña))
-    conn.commit()
+    try:
+        cursor.execute(
+            "INSERT INTO users (name, lastname, email, password) VALUES (%s, %s, %s, %s)",
+            (user.name, user.lastname, user.email, contraseña))
+        conn.commit()
+    except Exception:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE"}
     
     return {"message": "Se registro correctamente"}
-
-#           LOGIN
-@app.post("/login")
+# -------------------------------------------------------------------------------------------------------------------
+#                                    LOGIN
+@app.post("/users/login")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
-    
-    cursor.execute("SELECT email,password FROM users WHERE email=%s",[form.username])
-    user = cursor.fetchone()
+    try:
+        cursor.execute("SELECT email,password FROM users WHERE email=%s",[form.username])
+        user = cursor.fetchone()
+    except Exception:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE"}
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     
     if not crypt.verify(form.password,user[1]): 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
                             detail="The password is incorrect")
-    
+
     access_token = {"sub":user[0],
                    "exp": datetime.utcnow() + timedelta(minutes=ACCES_TOKEN_DURATION)}
 
     return {"access_token": jwt.encode(access_token,SECRET,algorithm=ALGORITHM),"token_type": "bearer"}
+# -------------------------------------------------------------------------------------------------------------------
 
 
-
-# COMPRUEBA SI LA PERSONA SE LOGEO CORRECTAMENTE
-async def comprobarToken(token: str = Depends(oauth2)):
-    error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales de autenticación inválidas",
-        headers={"WWW-Authenticate": "Bearer"})
-    
-    try:
-        username = jwt.decode(token,SECRET,algorithms=[ALGORITHM]).get("sub")
-        if username is None:
-            raise error
-    except JWTError:
-        raise error
-    
-    cursor.execute("SELECT name,lastname,email,id FROM users WHERE email=%s",[username])
-    usernamee = cursor.fetchone()
-    
-    return usernamee
-
-#  RETORNA INFORMACION DE USUARIO LOGEADO
-@app.get("/users/me")
-async def me(user: User = Depends(comprobarToken)):
-    return user
-
-
-
-# EDITA LA INFORMACION DE UN USUARIO
+#                           EDITA LA INFORMACION DE UN USUARIO
 # EJEMPLO 
 # http://127.0.0.1:8000/users/editUser/name?newdate=Aylen
 @app.put("/users/editUser/{columnaName}")
@@ -190,19 +205,48 @@ async def editUsers(columnaName: str, newdate: str, user: User = Depends(comprob
         return {"ERROR": f"OCURRIO UN ERROR \n {error}"}
     if columnaName == "password":
         newdate = Haspassword(newdate)
-        print(newdate)
+    elif columnaName == "email":
+        try:
+
+            cursor.execute(f"SELECT id FROM users WHERE {columnaName} = %s",[newdate])
+            date = cursor.fetchone()
+        except Exception:
+            return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTELO MAS TARDE"}
+        if date:
+            return{"ERROR": "ESE EMAIL YA ESTA EN USO EN OTRA CUENTA"}
+        else: 
+            pass
  
     try:
         cursor.execute(f"UPDATE users SET {columnaName} = %s WHERE id = %s", [newdate, user[3]])
         conn.commit()
-    except Exception as e:
+    except Exception:
         return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTELO MAS TARDE"}
     
     return {"Put": "Se actualizo correctamente el usuario"}
     
     
 
+#                           ELIMINAR UN USUARIO
+
+@app.delete("/users/deleteuser/{emailUser}")
+async def deleteUser(emailUser: str,user: User = Depends(comprobarToken)):
+    try:
+
+        cursor.execute("SELECT id FROM users WHERE email = %s",[emailUser])
+        dato = cursor.fetchone()
+    except Exception:
+        return {"ERROR": "OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTELO MAS TARDE"}
+    if dato:
+        if emailUser == user[2]:
+            cursor.execute("DELETE FROM users WHERE name = %s",[emailUser])
+            conn.commit()
+            return {"OK": "Usuario eliminado correctamente"}
+        else:
+            return {"ERROR": "DEBES INICIAR SESION CON EL USUARIO PARA PODER ELIMINARLO"}
+    else:
+        {"ERROR": "El usuario que desea eliminar no existe. Compruebe su informacion"}
+
 
 # Register administradores
-
 
