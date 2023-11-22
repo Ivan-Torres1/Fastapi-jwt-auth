@@ -1,6 +1,7 @@
 
 from fastapi import FastAPI,Depends, HTTPException,status
-from pydantic import BaseModel,EmailStr,constr
+from pydantic import BaseModel,EmailStr,Field
+from re import Pattern
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt,JWTError
 from passlib.context import CryptContext
@@ -8,7 +9,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 import pymysql
 from envparse import Env
-import time 
+from typing import Type
+from sqlmodel import SQLModel
 
 
 
@@ -42,7 +44,7 @@ password = env.str("password")
 
 # VARIABLES
 oauth2 = OAuth2PasswordBearer(tokenUrl="login")
-ACCES_TOKEN_DURATION = 5
+ACCES_TOKEN_DURATION = 10
 SECRET = env.str("SECRET")
 ALGORITHM = "HS256"
 crypt = CryptContext(schemes=["bcrypt"])
@@ -116,39 +118,52 @@ async def comprobarToken(token: str = Depends(oauth2),db: pymysql.connections.Co
 #                           basemodel
 
 class User(BaseModel):
-    name: constr(
+    name: str = Field(
         min_length=2,
         max_length=40,
-        regex="^[A-Za-z]+$")
+        pattern="^[A-Za-z]+$")
     
-    lastname: constr(min_length=2,
+    lastname: str = Field(
+        min_length=2,
         max_length=40,
-        regex="^[A-Za-z]+$")
+        pattern="^[A-Za-z]+$")
 
-    password: constr( 
+    password: str = Field( 
         min_length=7,
-        regex="^(?=.*[A-Z])(?=.*[0-9]).*$" )
+        pattern="^(?=.*[A-Z])(?=.*[0-9]).*$")
+        
+    
+    def __get_pydantic_core_schema__(self, cls: Type["BaseModel"], **kwargs):
+        return {
+            "type": "string",
+            "minLength": 7,
+            "pattern": "^(?=.*[A-Z])(?=.*[0-9]).*$"}
+
+
     email: EmailStr
 
 
-
+# ------------------------------------------------
 class UserValidationEdit(BaseModel):
-    name: Optional[constr(
+    name: Optional[Field(
         min_length=2,
         max_length=40,
-        regex="^[A-Za-z]+$")]
+        pattern="^[A-Za-z]+$")]
     
-    lastname: Optional[constr(min_length=2,
+    lastname: Optional[Field(min_length=2,
         max_length=40,
-        regex="^[A-Za-z]+$")]
+        pattern="^[A-Za-z]+$")]
 
-    password: Optional[constr( 
+    password: Optional[Field( 
         min_length=7,
-        regex="^(?=.*[A-Z])(?=.*[0-9]).*$" )]
+        pattern="^[A-Za-z]+$")]
+    def __get_pydantic_core_schema__(self, cls: Type["BaseModel"], **kwargs):
+        return {
+            "type": "string",
+            "minLength": 7,
+            "pattern": "^(?=.*[A-Z])(?=.*[0-9]).*$"}
+            
     email: Optional[EmailStr]
-
-
-
 
 
 
