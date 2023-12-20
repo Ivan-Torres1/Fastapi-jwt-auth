@@ -1,17 +1,18 @@
 
 from fastapi import FastAPI,Depends, HTTPException,status
+from pydantic import ValidationError
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt,JWTError
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Optional
-from pymysql import Error
+from sqlalchemy.exc import SQLAlchemyError
 from envparse import Env
 from typing import Type
-from sqlmodel import SQLModel, create_engine,Session,Field,select 
+from sqlmodel import SQLModel, create_engine,Session,Field,select,or_
 from pydantic import EmailStr
+import pymysql
 
-# TERMINA DE HACER LOS EXECUTE A LA BASE DE DATOS, ARREGLA LA FUNCION VERIFYUSER Y MAS
 
 
 """
@@ -29,8 +30,9 @@ from pydantic import EmailStr
 
 app = FastAPI()
 
+pathEnv = "config/.env"
 env = Env()
-env.read_envfile()
+env.read_envfile(pathEnv)
 
 
 
@@ -51,40 +53,20 @@ crypt = CryptContext(schemes=["bcrypt"])
 
 
 url_db = f"mysql+pymysql://{useer}:{password}@{host}/{database}"
-engine = create_engine(url=url_db,echo=True)
-
+engine = create_engine(url=url_db)
 
 
 
 
  #                                                                          SQL MODEL - MODELO DE TABLA
-class User(SQLModel, table=True):
-    id: Optional[int] = Field(
-        default=None, 
-        primary_key=True)
-    
-    name: str = Field(
-        min_length=2,
-        max_length=40,
-        regex="^[A-Za-z]+$")
-    
-    lastname: str = Field(
-        min_length=2, 
-        max_length=40, 
-        regex="^[A-Za-z]+$")
-    
-    password: str = Field(
-        min_length=6, 
-        regex="^(?=.*[A-Z])(?=.*[0-9]).*$")
-    email: str = EmailStr
-    
 
 # ------------------------------------------------
-class UserValidationEdit(SQLModel, table=True):
+class User(SQLModel, table=True):
+    __tablename__ = "users"
     id: Optional[int] = Field(
         default=None, 
         primary_key=True)
-
+        
     name: Optional[str] = Field(
         min_length=2,
         max_length=40, 
@@ -99,7 +81,9 @@ class UserValidationEdit(SQLModel, table=True):
         min_length=6, 
         regex="^(?=.*[A-Z])(?=.*[0-9]).*$")
     
-    email: Optional[str] = EmailStr
+    email: Optional[EmailStr] = Field(index=True)
+
+  
 
 
 # /////////////////////////////////////////////////////
@@ -116,47 +100,58 @@ def Haspassword(password):
 
 def errordb(e):
     raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                    headers="OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE",detail=e)
+                                    detail=f"OCURRIO UN ERROR CON LA BASE DE DATOS, INTENTE MAS TARDE {e}")
 
 def VerifyUser(emailUser,nameUser):
     try:
         with Session(engine) as session:
-            date = session.exec(select(User).where(User.email == emailUser, User.name == nameUser))
-    except Error as e:
+            date = session.exec(select(User.name).where(or_(User.email == emailUser,User.name == nameUser))).first()
+    except SQLAlchemyError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al verificar usuario: {str(e)}")
+    
     if date:
+
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,
-                        detail="Su gmail o nombre de usuario ya se ha usado para crear una cuenta",
+                        detail="Su gmail o nombre de usuario ya estan en uso. Por favor, pruebe con otro.",
                         headers={"ERROR":"NOT ACCEPTABLE"})
     
+# En la funcion "VerifyUser" hay formas de hacerlo mejor pero, como en mi caso queria probar y aprender a como usar los indices para 
+# hacer consultas mas eficientes, no encuentro mejor forma de hacerlo que no sea asi. Podria agregar mas indices pero no se si seria mas
+# eficientes en cuanto a recursos que usaria y el tamaño. En fin, solo lo hago de prueba, en otro caso esperaria a ver los recursos que tengo
+# y accionar luego, este es un caso hipotetico.
 
 
 
 
 
+ 
 
 #                                   COMPRUEBA SI LA PERSONA SE LOGEO CORRECTAMENTE / COMPRUEBA EL TOKEN
 async def comprobarToken(token: str = Depends(oauth2)):
     error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales de autenticación inválidas",
         headers={"WWW-Authenticate": "Bearer"})
-    
+
     try:
-        usernameDecode = jwt.decode(token,SECRET,algorithms=[ALGORITHM]).get("sub")
-        if usernameDecode is None:
-            raise error
+        usernameDecode = jwt.decode(token,SECRET,algorithms=[ALGORITHM]).get("sub")    
+        
     except JWTError:
         raise error
-    
-    try:
-        with Session(engine) as session:
-            username = session.exec(select(User.name,User.lastname,User.email,User.id).where(User.email == usernameDecode))
-    except Error as e:
-        errordb(e)
 
-    return username
+    if usernameDecode is None:
+        raise error
+
+    try:
+        
+        with Session(engine) as session:
+            username = session.exec(select(User.name,User.lastname,User.email,User.id).where(usernameDecode == User.email)).all()
+    except SQLAlchemyError as e:
+        errordb(e)
+    us_tupla = username[0]
+    us_tupla = tuple(us_tupla)
+    return us_tupla
 # ------------------------------------------------------------------------------------------------------
 
 
@@ -173,7 +168,8 @@ async def users():
     try:
         with Session(engine) as session:
             users = session.exec(select(User)).all()
-    except Error as e:
+
+    except SQLAlchemyError as e:
         errordb(e)
     return users                                
 
@@ -194,25 +190,27 @@ async def registro(user: User):
     contraseña = Haspassword(user.password)
     try:
         with Session(engine) as session:
-            usuario = User(name=user.name,lastname=user.lastname,password=user.password,email=user.email)
+            usuario = User(name=user.name,lastname=user.lastname,password=contraseña,email=user.email)
             session.add(usuario)
             session.commit()
            
-    except Exception as e:
+    except SQLAlchemyError as e:
                 errordb(e)
     
-    return {"message": "Se registro correctamente"}
+    return {"message": f"Se registro correctamente"}
 # -------------------------------------------------------------------------------------------------------------------
 #                                               LOGIN
 @app.post("/users/login")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
+    print("HOLA MUNDOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     try:
         with Session(engine) as session:
-            user = session.exec(select(User.email,User.password).where(User.email == form.username)).all()
-    except Error as e:
+            user = session.exec(select(User.email,User.password).where(form.username == User.email)).first()
+
+    except SQLAlchemyError as e:
         errordb(e)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not founnd")
     
     if not crypt.verify(form.password,user[1]): 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
@@ -228,56 +226,68 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 #                                               EDITA LA INFORMACION DE UN USUARIO
 # EJEMPLO 
 # http://127.0.0.1:8000/users/editUser/name?newdate=Aylen
-@app.put("/users/editUser/{columnaName}")
-async def editUsers(columnaName: str, newdate: str, user: User = Depends(comprobarToken)):
-    diccio = {columnaName: newdate}
-    validation = UserValidationEdit(columnaName=newdate)
+@app.put("/users/editUser/{column_extracted}")
+async def editUsers(column_extracted: str, newdate: str, user: User = Depends(comprobarToken)):
+   
+    diccio = {column_extracted: newdate}
+    usuario = User()
     try:
-        validation.validate(value=diccio)
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,headers="OCURRIO UN ERROR",detail=e)
-        
-    if columnaName == "password":
+        usuario.validate(value=diccio)
+    except ValueError as e: 
+        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,
+                            detail=f"ERROR DE VALIDACIÓN {e}")
+ 
+    if column_extracted == "password":
         newdate = Haspassword(newdate)
-    elif columnaName == "email":
+
+    elif column_extracted == "email":
+        atributo = getattr(User,column_extracted)
         try:
             with Session(engine) as session:
-                date = session.exec(select(User.id).where(columnaName == newdate))
-        except Error as e:
+                date = session.exec(select(User.id).where(atributo == newdate)).first()
+                
+        except SQLAlchemyError as e:
                 errordb(e)
         if date:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail="El correo ya esta en uso. Por favor, elija otro.")
- 
+
+    gmailUser = user[2]
+  
     try:
         with Session(engine) as session:
-            pass
-            # cursor.execute(f"UPDATE users SET {columnaName} = %s WHERE id = %s", [newdate, user[3]])
-            # db.commit()
-    except Error as e:
+            userUpdate = session.exec(select(User).where(gmailUser == User.email)).first()
+              
+            setattr(userUpdate, column_extracted,newdate)
+            session.commit()
+            session.refresh(userUpdate)
+    except SQLAlchemyError as e:
                 errordb(e)
-    
+  
+
     raise HTTPException(status_code=status.HTTP_200_OK,detail="Se actualizo correctamente el usuario")
+
     
     
     
 
-#                                                   ELIMINAR UN USUARIO
+#                                                         ELIMINAR UN USUARIO
 
 @app.delete("/users/deleteuser/{emailUser}")
-async def deleteUser(emailUser: str,user: User = Depends(comprobarToken),db: pymysql.connections.Connection = Depends(get_db)):
+async def deleteUser(emailUser: str,user: User = Depends(comprobarToken)):
     try:
-        with db.cursor() as cursor:
-            cursor.execute("SELECT id FROM users WHERE email = %s",[emailUser])
-            dato = cursor.fetchone()
-    except Error as e:
+        with Session(engine) as session:
+            dato = session.exec(select(User.id).where(emailUser == User.email)).first()
+            print(dato)
+    except SQLAlchemyError as e:
                 errordb(e)
     if dato:
         if emailUser == user[2]:
             try:
-                with db.cursor() as cursor:
-                    cursor.execute("DELETE FROM users WHERE email = %s",[emailUser])
-                    db.commit()
-            except Error as e:
+                with Session(engine) as session:
+                    userr = session.exec(select(User).where(emailUser == User.email)).first()
+                    session.delete(userr)
+                    session.commit()
+            except SQLAlchemyError as e:
                 errordb(e)
             raise HTTPException(status_code=status.HTTP_202_ACCEPTED,detail="Usuario eliminado correctamente")
             
