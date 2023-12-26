@@ -65,4 +65,4 @@ node_modules/
 # dotenv environment variables file
 .env
 
-._pycache_
+_pyache_/
