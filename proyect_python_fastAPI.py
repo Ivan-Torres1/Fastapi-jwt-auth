@@ -17,12 +17,12 @@ import pymysql
 
 """
 
-{"name":"Marta",
-"lastname":"Flores",
-"password":"Familia123",
-"email":"lamartamanda@gmail.com"}
+{"name":"Ivan",
+"lastname":"Torres",
+"password":"Spider123",
+"email":"spiderman@gmail.com"}
 
-# PatriManda123
+Usuario de pruebas
 
 
 """
