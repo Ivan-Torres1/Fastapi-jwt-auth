@@ -28,7 +28,15 @@ Usuario de pruebas
 """
 
 
-app = FastAPI()
+app = FastAPI(title="API JWT-OAUTH2",
+     version="0.0.1",
+     contact={
+          "name": "Ivan Torres",
+          "Linkedin": "https://www.linkedin.com/in/ivan-torres-820914257/",
+          "Github": "https://github.com/Ivan-Torres1/ivanapi"
+     }
+
+)
 
 pathEnv = "config/.env"
 env = Env()
@@ -157,13 +165,13 @@ async def comprobarToken(token: str = Depends(oauth2)):
 
 
 
-@app.get("/")
+@app.get("/",tags=["Users"])
 async def saludo():
     return {"Hola":"Mundo"}
 
 
 #                                       VER TODOS LOS USUARIOS DE LA BASE DE DATOS
-@app.get("/users")
+@app.get("/users",tags=["Users"])
 async def users():
     try:
         with Session(engine) as session:
@@ -177,14 +185,14 @@ async def users():
 
 
 #                                        RETORNA INFORMACION DE USUARIO LOGEADO
-@app.get("/users/me")
+@app.get("/users/me",tags=["CRUD-USERS"])
 async def me(user: User = Depends(comprobarToken)):
     return user
 
 # -------------------------------------------------------------------------------------------------------------------
 
 #                                                REGISTER
-@app.post("/users/registers")
+@app.post("/users/registers",tags=["CRUD-USERS"])
 async def registro(user: User):
     VerifyUser(user.email,user.name)
     contraseña = Haspassword(user.password)
@@ -200,7 +208,7 @@ async def registro(user: User):
     return {"message": f"Se registro correctamente"}
 # -------------------------------------------------------------------------------------------------------------------
 #                                               LOGIN
-@app.post("/users/login")
+@app.post("/users/login",tags=["CRUD-USERS"])
 async def login(form: OAuth2PasswordRequestForm = Depends()):
     print("HOLA MUNDOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     try:
@@ -226,7 +234,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 #                                               EDITA LA INFORMACION DE UN USUARIO
 # EJEMPLO 
 # http://127.0.0.1:8000/users/editUser/name?newdate=Aylen
-@app.put("/users/editUser/{column_extracted}")
+@app.put("/users/editUser/{column_extracted}",tags=["CRUD-USERS"])
 async def editUsers(column_extracted: str, newdate: str, user: User = Depends(comprobarToken)):
    
     diccio = {column_extracted: newdate}
@@ -272,7 +280,7 @@ async def editUsers(column_extracted: str, newdate: str, user: User = Depends(co
 
 #                                                         ELIMINAR UN USUARIO
 
-@app.delete("/users/deleteuser/{emailUser}")
+@app.delete("/users/deleteuser/{emailUser}",tags=["CRUD-USERS"])
 async def deleteUser(emailUser: str,user: User = Depends(comprobarToken)):
     try:
         with Session(engine) as session:
