@@ -22,20 +22,32 @@ import pymysql
 "password":"Spider123",
 "email":"spiderman@gmail.com"}
 
+<<<<<<< HEAD
 Usuario de prueba
+=======
+Usuario de pruebas
+>>>>>>> pruebas
 
 
 """
 
 
+<<<<<<< HEAD
 app = FastAPI(
      title="API JWT-OAUTH2",
+=======
+app = FastAPI(title="API JWT-OAUTH2",
+>>>>>>> pruebas
      version="0.0.1",
      contact={
           "name": "Ivan Torres",
           "Linkedin": "https://www.linkedin.com/in/ivan-torres-820914257/",
           "Github": "https://github.com/Ivan-Torres1/ivanapi"
      }
+<<<<<<< HEAD
+=======
+
+>>>>>>> pruebas
 )
 
 pathEnv = "config/.env"
